@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tic Tac Toe Ultimate</title>
+
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    background: #f2f2f2;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  body.dark {
+    background: #121212;
+    color: #f2f2f2;
+  }
+
+  h1 { margin-top: 20px; }
+
+  #controls {
+    margin: 10px;
+  }
+
+  select, button {
+    padding: 6px 10px;
+    margin: 5px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  body.dark select,
+  body.dark button {
+    background: #1e1e1e;
+    color: white;
+    border: 1px solid #555;
+  }
+
+  #scoreboard {
+    display: flex;
+    justify-content: center;
+    gap: 25px;
+    font-size: 18px;
+    margin: 10px;
+  }
+
+  #status {
+    font-size: 18px;
+    margin: 10px;
+  }
+
+  #board {
+    display: grid;
+    grid-template-columns: repeat(3, 100px);
+    gap: 10px;
+    justify-content: center;
+    margin: 20px auto;
+  }
+
+  .cell {
+    width: 100px;
+    height: 100px;
+    background: white;
+    border: 2px solid #333;
+    font-size: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+  }
+
+  body.dark .cell {
+    background: #1e1e1e;
+    border-color: #555;
+    color: white;
+  }
+
+  .cell:hover {
+    background: #e0e0e0;
+    transform: scale(1.05);
+  }
+
+  body.dark .cell:hover {
+    background: #2a2a2a;
+  }
+
+  /* Animations */
+  .pop { animation: pop 0.2s ease-out; }
+  @keyframes pop {
+    0% { transform: scale(0.5); }
+    100% { transform: scale(1); }
+  }
+
+  .win {
+    animation: glow 0.8s infinite alternate;
+    background: #c8ffc8 !important;
+  }
+
+  body.dark .win {
+    background: #145214 !important;
+  }
+
+  @keyframes glow {
+    from { box-shadow: 0 0 5px #00cc00; }
+    to { box-shadow: 0 0 20px #00ff00; }
+  }
+
+  .shake { animation: shake 0.4s; }
+  @keyframes shake {
+    0% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    50% { transform: translateX(5px); }
+    75% { transform: translateX(-5px); }
+    100% { transform: translateX(0); }
+  }
+</style>
+</head>
+<body>
+
+<h1>Tic Tac Toe</h1>
+
+<div id="controls">
+  Mode:
+  <select id="mode" onchange="resetGame()">
+    <option value="pvp">Player vs Player</option>
+    <option value="ai">Player vs AI</option>
+  </select>
+
+  AI Difficulty:
+  <select id="difficulty">
+    <option value="easy">Easy</option>
+    <option value="medium">Medium</option>
+    <option value="hard">Hard</option>
+  </select>
+
+  <button onclick="toggleDarkMode()">🌙 Dark Mode</button>
+  <button id="soundToggle" onclick="toggleSound()">🔊 Sound: On</button>
+</div>
+
+<div id="scoreboard">
+  ❌ X: <span id="scoreX">0</span>
+  ⭕ O: <span id="scoreO">0</span>
+  🤝 Draws: <span id="scoreDraw">0</span>
+</div>
+
+<div id="status">Player X's turn</div>
+
+<div id="board"></div>
+
+<button onclick="resetGame()">Restart</button>
+
+<script>
+let board = Array(9).fill("");
+let currentPlayer = "X";
+let gameActive = true;
+
+let scoreX = 0, scoreO = 0, scoreDraw = 0;
+
+const boardEl = document.getElementById("board");
+const statusText = document.getElementById("status");
+const modeSelect = document.getElementById("mode");
+const difficultySelect = document.getElementById("difficulty");
+
+const wins = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+
+// Build board
+for (let i = 0; i < 9; i++) {
+  const cell = document.createElement("div");
+  cell.className = "cell";
+  cell.onclick = () => handleMove(i);
+  boardEl.appendChild(cell);
+}
+
+const cells = document.getElementsByClassName("cell");
+
+function handleMove(i) {
+  if (!gameActive || board[i]) return;
+  playMove(i, currentPlayer);
+
+  // If this was a user interaction, ensure audio is available (satisfies autoplay policies)
+  try { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); } catch(e){}
+
+  if (gameActive && modeSelect.value === "ai" && currentPlayer === "O") {
+    statusText.innerText = "AI thinking...";
+    setTimeout(aiMove, 400);
+  }
+}
+
+function playMove(i, player) {
+  board[i] = player;
+  cells[i].innerText = player;
+  cells[i].classList.add("pop");
+  setTimeout(() => cells[i].classList.remove("pop"), 200);
+  playMoveSound();
+
+  const winCombo = checkWin(player);
+  if (winCombo) {
+    winCombo.forEach(i => cells[i].classList.add("win"));
+    gameActive = false;
+    player === "X" ? scoreX++ : scoreO++;
+    updateScores();
+    statusText.innerText = `${player} wins!`;
+    playWinSound();
+    return;
+  }
+
+  if (!board.includes("")) {
+    scoreDraw++;
+    updateScores();
+    boardEl.classList.add("shake");
+    setTimeout(() => boardEl.classList.remove("shake"), 400);
+    statusText.innerText = "It's a draw!";
+    gameActive = false;
+    playDrawSound();
+    return;
+  }
+
+  currentPlayer = currentPlayer === "X" ? "O" : "X";
+  statusText.innerText =
+    modeSelect.value === "ai" && currentPlayer === "O"
+      ? "AI's turn"
+      : `Player ${currentPlayer}'s turn`;
+}
+
+/* ---- Sound (WebAudio) ---- */
+let audioCtx = null;
+let soundEnabled = true;
+
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  document.getElementById('soundToggle').innerText = soundEnabled ? '🔊 Sound: On' : '🔇 Sound: Off';
+  try {
+    if (soundEnabled) {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioCtx.resume && audioCtx.resume();
+    }
+  } catch (e) {}
+}
+
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function playTone(freq, duration = 0.08, type = 'sine') {
+  if (!soundEnabled) return;
+  try {
+    if (!audioCtx) ensureAudio();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.2, audioCtx.currentTime + 0.01);
+    o.connect(g);
+    g.connect(audioCtx.destination);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+    o.stop(audioCtx.currentTime + duration + 0.02);
+  } catch (e) {}
+}
+
+function playMoveSound() { playTone(700, 0.06, 'sine'); }
+function playWinSound() { playTone(880, 0.14, 'sawtooth'); setTimeout(()=>playTone(1100,0.12,'sawtooth'),120); }
+function playDrawSound() { playTone(320, 0.18, 'triangle'); }
+
+function aiMove() {
+  let move;
+  const d = difficultySelect.value;
+  if (d === "easy") move = randomMove();
+  else if (d === "medium") move = Math.random() < 0.5 ? randomMove() : bestMove();
+  else move = bestMove();
+  playMove(move, "O");
+}
+
+function randomMove() {
+  const empty = board.map((v,i)=>v===""?i:null).filter(v=>v!==null);
+  return empty[Math.floor(Math.random()*empty.length)];
+}
+
+function bestMove() {
+  let best = -Infinity, move;
+  for (let i=0;i<9;i++) {
+    if (board[i]==="") {
+      board[i]="O";
+      let score = minimax(0,false);
+      board[i]="";
+      if (score>best) { best=score; move=i; }
+    }
+  }
+  return move;
+}
+
+function minimax(depth,isMax) {
+  if (checkWin("O")) return 10-depth;
+  if (checkWin("X")) return depth-10;
+  if (!board.includes("")) return 0;
+
+  let best = isMax ? -Infinity : Infinity;
+  for (let i=0;i<9;i++) {
+    if (board[i]==="") {
+      board[i]=isMax?"O":"X";
+      let score = minimax(depth+1,!isMax);
+      board[i]="";
+      best = isMax ? Math.max(best,score) : Math.min(best,score);
+    }
+  }
+  return best;
+}
+
+function checkWin(player) {
+  return wins.find(c => c.every(i => board[i] === player)) || null;
+}
+
+function updateScores() {
+  document.getElementById("scoreX").innerText = scoreX;
+  document.getElementById("scoreO").innerText = scoreO;
+  document.getElementById("scoreDraw").innerText = scoreDraw;
+}
+
+function resetGame() {
+  board.fill("");
+  gameActive = true;
+  currentPlayer = "X";
+  statusText.innerText = "Player X's turn";
+  for (let cell of cells) cell.innerText = cell.className = "cell";
+}
+
+/* 🌙 DARK MODE */
+function toggleDarkMode() {
+  document.body.classList.toggle("dark");
+  localStorage.setItem("darkMode", document.body.classList.contains("dark"));
+}
+
+if (localStorage.getItem("darkMode") === "true") {
+  document.body.classList.add("dark");
+}
+</script>
+
+</body>
+</html>
